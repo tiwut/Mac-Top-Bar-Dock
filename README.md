@@ -6,6 +6,17 @@ Built entirely with standard **C++17** and **Objective-C++ (AppKit)**, requiring
 
 <img width="1710" height="1112" alt="Screenshot 2026-05-26 at 21 09 57" src="https://github.com/user-attachments/assets/3fd7476c-577b-470b-999c-9cc43e61dee8" />
 
+## Install via Homebrew
+
+```bash
+brew tap Nexus-Titan/tab https://github.com/Nexus-Titan/homebrew-tap.git
+brew update
+brew install tiwut-mac-top-bar-dock
+
+# Run with:
+tiwut-mac-top-bar-dock
+```
+
 ## How to run the APP?
 
 ```bash
