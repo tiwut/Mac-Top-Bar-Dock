@@ -1,4 +1,6 @@
 #import <Cocoa/Cocoa.h>
+#import <CoreImage/CoreImage.h>
+#import <QuartzCore/QuartzCore.h>
 #include <iostream>
 
 @interface FlippedView : NSView
@@ -17,11 +19,203 @@
 @implementation AppItemObj
 @end
 
-@interface ItemButton : NSButton
+@interface GlassOverlayView : NSView
+@end
+
+@implementation GlassOverlayView
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.wantsLayer = YES;
+  }
+  return self;
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+  NSRect bounds = self.bounds;
+
+  [NSGraphicsContext saveGraphicsState];
+
+  NSBezierPath *glossPath = [NSBezierPath bezierPath];
+  [glossPath moveToPoint:NSMakePoint(0, bounds.size.height)];
+  [glossPath lineToPoint:NSMakePoint(bounds.size.width, bounds.size.height)];
+  [glossPath
+      lineToPoint:NSMakePoint(bounds.size.width, bounds.size.height - 120)];
+  [glossPath lineToPoint:NSMakePoint(0, bounds.size.height - 240)];
+  [glossPath closePath];
+
+  NSGradient *glossGradient = [[NSGradient alloc]
+      initWithStartingColor:[NSColor colorWithWhite:1.0 alpha:0.07]
+                endingColor:[NSColor colorWithWhite:1.0 alpha:0.0]];
+  [glossGradient drawInBezierPath:glossPath angle:-45.0];
+
+  NSBezierPath *borderPath =
+      [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(bounds, 0.5, 0.5)
+                                      xRadius:24.0
+                                      yRadius:24.0];
+  [borderPath setLineWidth:1.0];
+  [[NSColor colorWithWhite:1.0 alpha:0.18] setStroke];
+  [borderPath stroke];
+
+  NSBezierPath *topHighlightPath = [NSBezierPath bezierPath];
+  CGFloat r = 24.0;
+  [topHighlightPath moveToPoint:NSMakePoint(0, bounds.size.height - r)];
+  [topHighlightPath
+      appendBezierPathWithArcWithCenter:NSMakePoint(r, bounds.size.height - r)
+                                 radius:r
+                             startAngle:180.0
+                               endAngle:90.0
+                              clockwise:YES];
+  [topHighlightPath
+      lineToPoint:NSMakePoint(bounds.size.width - r, bounds.size.height)];
+  [topHighlightPath
+      appendBezierPathWithArcWithCenter:NSMakePoint(bounds.size.width - r,
+                                                    bounds.size.height - r)
+                                 radius:r
+                             startAngle:90.0
+                               endAngle:0.0
+                              clockwise:YES];
+
+  [topHighlightPath setLineWidth:1.5];
+  [[NSColor colorWithWhite:1.0 alpha:0.35] setStroke];
+  [topHighlightPath stroke];
+
+  [NSGraphicsContext restoreGraphicsState];
+}
+
+@end
+
+@interface ItemButton : NSButton {
+  NSTrackingArea *_trackingArea;
+  BOOL _isHovered;
+  BOOL _isPressed;
+}
 @property(strong) AppItemObj *item;
 @property(assign) NSInteger windowLevelIndex;
+@property(assign, nonatomic) CGFloat hoverScale;
 @end
+
 @implementation ItemButton
+
++ (id)defaultAnimationForKey:(NSAnimatablePropertyKey)key {
+  if ([key isEqualToString:@"hoverScale"]) {
+    return [CABasicAnimation animation];
+  }
+  return [super defaultAnimationForKey:key];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    _hoverScale = 1.0;
+    self.wantsLayer = YES;
+  }
+  return self;
+}
+
+- (void)setHoverScale:(CGFloat)hoverScale {
+  _hoverScale = hoverScale;
+  [self setNeedsDisplay:YES];
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  if (_trackingArea != nil) {
+    [self removeTrackingArea:_trackingArea];
+  }
+
+  NSTrackingAreaOptions options =
+      NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways;
+  _trackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds
+                                               options:options
+                                                 owner:self
+                                              userInfo:nil];
+  [self addTrackingArea:_trackingArea];
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+  _isHovered = YES;
+  [[self animator] setHoverScale:1.51];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+  _isHovered = NO;
+  [[self animator] setHoverScale:1.0];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  _isPressed = YES;
+  [[self animator] setHoverScale:3.02];
+  [super mouseDown:event];
+  _isPressed = NO;
+  [[self animator] setHoverScale:_isHovered ? 1.12 : 1.0];
+}
+
+- (void)mouseUp:(NSEvent *)event {
+  [super mouseUp:event];
+  _isPressed = NO;
+  [[self animator] setHoverScale:_isHovered ? 1.12 : 1.0];
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+  NSRect bounds = self.bounds;
+
+  if (_isHovered || _isPressed) {
+    [NSGraphicsContext saveGraphicsState];
+
+    NSRect pillRect = NSInsetRect(bounds, 1.0, 1.0);
+    NSBezierPath *pillPath = [NSBezierPath bezierPathWithRoundedRect:pillRect
+                                                             xRadius:14.0
+                                                             yRadius:14.0];
+
+    NSColor *fillColor;
+    NSColor *borderColor;
+
+    BOOL isDark = YES;
+    if (@available(macOS 10.14, *)) {
+      isDark = [[self.effectiveAppearance name]
+          containsString:NSAppearanceNameDarkAqua];
+    }
+
+    if (_isPressed) {
+      fillColor = isDark ? [NSColor colorWithWhite:1.0 alpha:0.18]
+                         : [NSColor colorWithWhite:0.0 alpha:0.14];
+      borderColor = isDark ? [NSColor colorWithWhite:1.0 alpha:0.25]
+                           : [NSColor colorWithWhite:0.0 alpha:0.18];
+    } else {
+      fillColor = isDark ? [NSColor colorWithWhite:1.0 alpha:0.10]
+                         : [NSColor colorWithWhite:0.0 alpha:0.05];
+      borderColor = isDark ? [NSColor colorWithWhite:1.0 alpha:0.18]
+                           : [NSColor colorWithWhite:0.0 alpha:0.10];
+    }
+
+    [fillColor setFill];
+    [pillPath fill];
+
+    [borderColor setStroke];
+    [pillPath setLineWidth:1.0];
+    [pillPath stroke];
+
+    [NSGraphicsContext restoreGraphicsState];
+  }
+
+  if (self.image) {
+    NSRect imageRect = bounds;
+    if (self.hoverScale != 1.0) {
+      CGFloat targetSize = bounds.size.width * self.hoverScale;
+      CGFloat diff = targetSize - bounds.size.width;
+      imageRect = NSMakeRect(-diff / 2, -diff / 2, targetSize, targetSize);
+    }
+    [self.image drawInRect:NSInsetRect(imageRect, 6.0, 6.0)
+                  fromRect:NSZeroRect
+                 operation:NSCompositingOperationSourceOver
+                  fraction:1.0
+            respectFlipped:YES
+                     hints:nil];
+  }
+}
+
 @end
 
 @interface CustomPanel : NSPanel
@@ -64,10 +258,23 @@
 }
 
 - (void)closeAllWindows {
-  for (NSWindow *w in self.activeWindows) {
-    [w orderOut:nil];
-  }
+  NSArray<NSWindow *> *windowsToClose = [self.activeWindows copy];
   [self.activeWindows removeAllObjects];
+
+  [NSAnimationContext
+      runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.51;
+        context.timingFunction = [CAMediaTimingFunction
+            functionWithName:kCAMediaTimingFunctionEaseIn];
+        for (NSWindow *w in windowsToClose) {
+          [[w animator] setAlphaValue:0.0];
+        }
+      }
+      completionHandler:^{
+        for (NSWindow *w in windowsToClose) {
+          [w orderOut:nil];
+        }
+      }];
 }
 
 - (void)toggleApp:(id)sender {
@@ -106,16 +313,25 @@
   NSRect screenRect = [[NSScreen mainScreen] visibleFrame];
   CGFloat x = 0, y = 0;
 
+  CGFloat startX = 0, startY = 0;
+
   if (level == 0) {
     x = NSMidX(parentFrame) - (windowSize / 2.0);
     y = NSMinY(parentFrame) - windowSize - 10.0;
+
+    startX = x;
+    startY = y + 25.0;
   } else {
     x = NSMaxX(parentFrame) + 12.0;
     y = NSMaxY(parentFrame) - windowSize;
 
     if (x + windowSize > NSMaxX(screenRect)) {
       x = NSMinX(parentFrame) - windowSize - 12.0;
+      startX = x + 25.0;
+    } else {
+      startX = x - 25.0;
     }
+    startY = y;
   }
 
   if (x + windowSize > NSMaxX(screenRect))
@@ -125,8 +341,15 @@
   if (y < NSMinY(screenRect))
     y = NSMinY(screenRect) + 10.0;
 
+  if (startX + windowSize > NSMaxX(screenRect))
+    startX = NSMaxX(screenRect) - windowSize - 10.0;
+  if (startX < NSMinX(screenRect))
+    startX = NSMinX(screenRect) + 10.0;
+  if (startY < NSMinY(screenRect))
+    startY = NSMinY(screenRect) + 10.0;
+
   CustomPanel *window = [[CustomPanel alloc]
-      initWithContentRect:NSMakeRect(x, y, windowSize, windowSize)
+      initWithContentRect:NSMakeRect(startX, startY, windowSize, windowSize)
                 styleMask:NSWindowStyleMaskBorderless |
                           NSWindowStyleMaskNonactivatingPanel
                   backing:NSBackingStoreBuffered
@@ -135,6 +358,7 @@
   [window setBackgroundColor:[NSColor clearColor]];
   [window setLevel:NSFloatingWindowLevel];
   [window setHasShadow:YES];
+  [window setAlphaValue:0.0];
 
   NSVisualEffectView *blurView = [[NSVisualEffectView alloc]
       initWithFrame:NSMakeRect(0, 0, windowSize, windowSize)];
@@ -142,10 +366,13 @@
   blurView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
   blurView.state = NSVisualEffectStateActive;
   blurView.wantsLayer = YES;
-  blurView.layer.cornerRadius = 30.0;
+  blurView.layer.cornerRadius = 24.0;
   blurView.layer.masksToBounds = YES;
-  blurView.layer.borderWidth = 1.0;
-  blurView.layer.borderColor = [NSColor colorWithWhite:0.5 alpha:0.3].CGColor;
+
+  GlassOverlayView *glassOverlay = [[GlassOverlayView alloc]
+      initWithFrame:NSMakeRect(0, 0, windowSize, windowSize)];
+  glassOverlay.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [blurView addSubview:glassOverlay];
 
   NSFileManager *fm = [NSFileManager defaultManager];
   NSURL *baseURL = [NSURL fileURLWithPath:folderPath];
@@ -253,6 +480,17 @@
 
   [self.activeWindows addObject:window];
   [window makeKeyAndOrderFront:nil];
+
+  [NSAnimationContext
+      runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.51;
+        context.timingFunction = [CAMediaTimingFunction
+            functionWithName:kCAMediaTimingFunctionEaseOut];
+        [[window animator] setFrame:NSMakeRect(x, y, windowSize, windowSize)
+                            display:YES];
+        [[window animator] setAlphaValue:1.0];
+      }
+      completionHandler:nil];
 }
 
 - (void)itemClicked:(ItemButton *)sender {

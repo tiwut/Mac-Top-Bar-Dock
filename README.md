@@ -46,7 +46,7 @@ xcode-select --install
 3. **Compile the App** using the following command:
 
 ```bash
-g++ -std=c++17 -Wall -fobjc-arc -framework Cocoa TopBarDock.mm -o TopBarDock
+g++ -std=c++17 -Wall -fobjc-arc -framework Cocoa -framework QuartzCore TopBarDock.mm -o TopBarDock
 ```
 > **Note:** The `-fobjc-arc` flag is critical! It enables Automatic Reference Counting to ensure memory is managed properly when opening nested folders.
 
